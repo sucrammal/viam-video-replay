@@ -1,5 +1,5 @@
-# venv
-requirements.txt
+# module
+module.tar.gz
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
