@@ -5,36 +5,28 @@ GOPATH = $(HOME)/go/bin
 export PATH := ${PATH}:$(GOPATH)
 
 build: format update-rdk
-	@rm -f $(BIN_OUTPUT_PATH)/video-replay
-	@go build $(LDFLAGS) -o $(BIN_OUTPUT_PATH)/video-replay main.go
+	rm -f $(BIN_OUTPUT_PATH)/placeholder
+	go build $(LDFLAGS) -o $(BIN_OUTPUT_PATH)/placeholder main.go
 
 module.tar.gz: build
-	@rm -f $(BIN_OUTPUT_PATH)/module.tar.gz
-	@tar czf $(BIN_OUTPUT_PATH)/module.tar.gz $(BIN_OUTPUT_PATH)/video-replay
+	rm -f $(BIN_OUTPUT_PATH)/module.tar.gz
+	tar czf $(BIN_OUTPUT_PATH)/module.tar.gz $(BIN_OUTPUT_PATH)/placeholder
 
 setup:
-	@if [ "$(UNAME_S)" = "Linux" ]; then \
-		sudo apt-get update && \
-		sudo apt-get install -y \
-		  apt-utils \
-		  coreutils \
-		  tar \
-		  libnlopt-dev \
-		  libjpeg-dev \
-		  pkg-config \
-		  libopencv-dev \
-		  libopencv-contrib-dev; \
+	if [ "$(UNAME_S)" = "Linux" ]; then \
+		sudo apt-get install -y apt-utils coreutils tar libnlopt-dev libjpeg-dev pkg-config; \
 	fi
 	# remove unused imports
-	@go install golang.org/x/tools/cmd/goimports@latest
-	@find . -name '*.go' -exec $(GOPATH)/goimports -w {} +
+	go install golang.org/x/tools/cmd/goimports@latest
+	find . -name '*.go' -exec $(GOPATH)/goimports -w {} +
+
 
 clean:
-	@rm -rf $(BIN_OUTPUT_PATH)/video-replay $(BIN_OUTPUT_PATH)/module.tar.gz video-replay
+	rm -rf $(BIN_OUTPUT_PATH)/placeholder $(BIN_OUTPUT_PATH)/module.tar.gz placeholder
 
 format:
-	@gofmt -w -s .
+	gofmt -w -s .
 
 update-rdk:
-	@go get go.viam.com/rdk@latest
-	@go mod tidy
+	go get go.viam.com/rdk@latest
+	go mod tidy
