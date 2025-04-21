@@ -1,0 +1,12 @@
+{
+  "module_name": "video-replay",
+  "namespace": "bill",
+  "language": "go",
+  "resource_type": "component",
+  "resource_subtype": "camera",
+  "model_name": "video",
+  "enable_cloud_build": true,
+  "initialize_git": false,
+  "generator_version": "0.1.0",
+  "generated_on": "2025-03-05T01:02:43.421689Z"
+}
