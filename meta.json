@@ -7,8 +7,20 @@
   "models": [
     {
       "api": "rdk:component:camera",
-      "model": "bill:video:replay"
+      "model": "bill:video:replay",
+      "short_description": "Provide a short (100 characters or less) description of this model here",
+      "markdown_link": "README.md#model-billvideo-replayvideo"
     }
   ],
-  "entrypoint": "run.sh"
+  "entrypoint": "bin/video-replay",
+  "first_run": "",
+  "build": {
+    "build": "make module.tar.gz",
+    "setup": "make setup",
+    "path": "bin/module.tar.gz",
+    "arch": [
+      "linux/amd64",
+      "linux/arm64"
+    ]
+  }
 }

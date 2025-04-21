@@ -1,42 +1,50 @@
-# viam-video-replay
+# Module video-replay 
 
-## Description
+Provide a description of the purpose of the module and any relevant information.
 
-This project demonstrates the implementation of a custom Viam Camera component that replays video files. The camera component reads a video file and simulates live camera behavior by returning frames as images upon request. The component utilizes OpenCV to handle video capture and encoding, allowing it to deliver frames in real-time according to the frame rate of the original video. This approach is ideal for scenarios where testing or development requires consistent, repeatable video input without relying on a physical camera.
+## Model bill:video-replay:video
 
-## Viam Module
+Provide a description of the model and any relevant information.
 
-A module is a package with streamlined deployment to a Viam server. Modules can run alongside viam-server as separate processes, communicating with viam-server over UNIX sockets. A Viam Module can deploy and manage components such as a Viam Sensor.
+### Configuration
+The following attribute template can be used to configure this model:
 
-## Viam Camera
-
-The Viam Camera component in this project reads frames from a specified video file and returns them as images when the get_image method is called. The camera simulates live video feed behavior, ensuring consistent frame delivery based on the original video’s frame rate. This setup is particularly useful for testing machine vision applications where consistent, predictable video input is necessary.
-
-## Configuration
-
-To use this custom Viam Camera component, the following configuration is required:
-
-Generalized Attribute Guide
 ```json
 {
-  "video_path": "/path/to/video_file"
+"attribute_1": <float>,
+"attribute_2": <string>
 }
 ```
 
-Generic Example
+#### Attributes
+
+The following attributes are available for this model:
+
+| Name          | Type   | Inclusion | Description                |
+|---------------|--------|-----------|----------------------------|
+| `attribute_1` | float  | Required  | Description of attribute 1 |
+| `attribute_2` | string | Optional  | Description of attribute 2 |
+
+#### Example Configuration
+
 ```json
 {
-  "video_path": "/tmp/sample_video.mp4"
+  "attribute_1": 1.0,
+  "attribute_2": "foo"
 }
 ```
 
-This configuration specifies the path to the video file that the camera will replay. Ensure the video file is accessible from the path provided.
+### DoCommand
 
+If your model implements DoCommand, provide an example payload of each command that is supported and the arguments that can be used. If your model does not implement DoCommand, remove this section.
 
-## Key Methods
+#### Example DoCommand
 
-- get_image: Returns the current frame from the video as a JPEG-encoded image. If the video reaches its end, it restarts from the beginning.
-- validate_config: Validates that the necessary attributes (such as video_path) are present in the configuration.
-- reconfigure: Reconfigures the camera with new settings and initializes the video capture process.
-
-This component offers a versatile solution for scenarios where a simulated video feed is necessary, such as in testing environments or controlled experiments.
+```json
+{
+  "command_name": {
+    "arg1": "foo",
+    "arg2": 1
+  }
+}
+```
