@@ -18,9 +18,10 @@ import (
 )
 
 // Our camera model
-var Video = resource.NewModel("bill", "video-replay", "video")
+var Video = resource.NewModel("bill", "camera", "video-replay")
 
 func init() {
+	fmt.Println("[video-replay] init() called")
 	resource.RegisterComponent(
 		camera.API,
 		Video,
@@ -28,6 +29,7 @@ func init() {
 			Constructor: newVideoReplayVideo,
 		},
 	)
+	fmt.Println("[video-replay] Registering", Video.String())
 }
 
 // Config holds the JSON attributes
