@@ -15,6 +15,9 @@ import (
 	"go.viam.com/rdk/rimage/transform"
 	"go.viam.com/utils/rpc"
 	"gocv.io/x/gocv"
+
+	// Viam app client for data access
+	"go.viam.com/rdk/app"
 )
 
 // Our camera model
@@ -34,15 +37,72 @@ func init() {
 
 // Config holds the JSON attributes
 type Config struct {
-	VideoPath string `json:"video_path"`
+	// Local mode fields
+	VideoPath *string `json:"video_path,omitempty"`
+	FPS       *int    `json:"fps,omitempty"`
+	LoopVideo *bool   `json:"loop_video,omitempty"`
+	Height    *int    `json:"height,omitempty"`
+	Width     *int    `json:"width,omitempty"`
+
+	// Core dataset mode fields (simplified)
+	Mode           *string `json:"mode,omitempty"`           // "local" or "dataset"
+	APIKey         *string `json:"api_key,omitempty"`        // Viam API key
+	APIKeyID       *string `json:"api_key_id,omitempty"`     // Viam API key ID
+	OrganizationID *string `json:"organization_id,omitempty"` // Organization ID
+	DatasetID      *string `json:"dataset_id,omitempty"`     // Dataset ID to replay from
 }
 
-// Validate ensures VideoPath is set
+// Validate ensures required fields are set based on mode
 func (c *Config) Validate(path string) ([]string, error) {
-	if c.VideoPath == "" {
-		return nil, fmt.Errorf("video_path is required for video replay camera")
+	// Determine mode (default to local if not specified)
+	mode := "local"
+	if c.Mode != nil {
+		mode = *c.Mode
 	}
+
+	switch mode {
+	case "local":
+		if c.VideoPath == nil || *c.VideoPath == "" {
+			return nil, fmt.Errorf("video_path is required for local mode video replay camera")
+		}
+	case "dataset":
+		if c.APIKey == nil || *c.APIKey == "" {
+			return nil, fmt.Errorf("api_key is required for dataset mode")
+		}
+		if c.APIKeyID == nil || *c.APIKeyID == "" {
+			return nil, fmt.Errorf("api_key_id is required for dataset mode")
+		}
+		if c.OrganizationID == nil || *c.OrganizationID == "" {
+			return nil, fmt.Errorf("organization_id is required for dataset mode")
+		}
+		if c.DatasetID == nil || *c.DatasetID == "" {
+			return nil, fmt.Errorf("dataset_id is required for dataset mode")
+		}
+	default:
+		return nil, fmt.Errorf("invalid mode '%s': must be 'local' or 'dataset'", mode)
+	}
+
 	return nil, nil
+}
+
+// DatasetImage represents a cached image from a dataset
+type DatasetImage struct {
+	Data      []byte
+	Timestamp time.Time
+	Filename  string
+}
+
+// DatasetReplay handles fetching and replaying images from Viam datasets
+type DatasetReplay struct {
+	logger         logging.Logger
+	apiKey         string
+	apiKeyID       string
+	organizationID string
+	datasetID      string
+	
+	images       []DatasetImage
+	currentIndex int
+	mu           sync.RWMutex
 }
 
 // videoReplayVideo implements camera.Camera + resource.Reconfigurable
@@ -52,7 +112,7 @@ type videoReplayVideo struct {
 	cfg        *Config
 	cancelFunc context.CancelFunc // For main resource context
 
-	// We store the camera’s "lifetime" context in mainCtx.
+	// We store the camera's "lifetime" context in mainCtx.
 	// This is created in newVideoReplayVideo and ends when the resource is closed.
 	mainCtx context.Context
 
@@ -61,7 +121,7 @@ type videoReplayVideo struct {
 	loopCtx    context.Context
 	loopCancel context.CancelFunc
 
-	// OpenCV capture
+	// OpenCV capture (for local video mode)
 	videoCapture *gocv.VideoCapture
 	fps          float64
 
@@ -69,6 +129,10 @@ type videoReplayVideo struct {
 	frameMutex       sync.RWMutex
 	currentFrame     gocv.Mat
 	currentFrameTime time.Time
+
+	// Dataset replay fields
+	mode          string
+	datasetReplay *DatasetReplay
 }
 
 // newVideoReplayVideo is called once when camera is created
@@ -85,8 +149,13 @@ func newVideoReplayVideo(
 		return nil, err
 	}
 
-	// Create a context for the camera’s lifetime
+	// Determine mode (default to local if not specified)
+	mode := "local"
+	if conf.Mode != nil {
+		mode = *conf.Mode
+	}
 
+	// Create a context for the camera's lifetime
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	cam := &videoReplayVideo{
@@ -95,15 +164,32 @@ func newVideoReplayVideo(
 		cfg:        conf,
 		cancelFunc: cancelFunc,
 		mainCtx:    ctx,
+		mode:       mode,
 
 		// We'll open the video + start the loop below
 		currentFrame: gocv.NewMat(),
 	}
 
-	if err := cam.openAndStartLoop(conf.VideoPath); err != nil {
-		// If we fail to open, do cleanup
-		cancelFunc()
-		return nil, fmt.Errorf("failed to open camera at creation: %w", err)
+	// Initialize based on mode
+	switch mode {
+	case "local":
+		if err := cam.openAndStartLoop(*conf.VideoPath); err != nil {
+			// If we fail to open, do cleanup
+			cancelFunc()
+			return nil, fmt.Errorf("failed to open camera at creation: %w", err)
+		}
+	case "dataset":
+		datasetReplay, err := newDatasetReplay(conf, logger)
+		if err != nil {
+			cancelFunc()
+			return nil, fmt.Errorf("failed to initialize dataset replay: %w", err)
+		}
+		cam.datasetReplay = datasetReplay
+		
+		if err := cam.initDatasetReplay(); err != nil {
+			cancelFunc()
+			return nil, fmt.Errorf("failed to initialize dataset replay: %w", err)
+		}
 	}
 
 	logger.Warnf("Camera %q: real-time streaming not implemented; SubscribeRTP calls will fail", cam.name)
@@ -208,12 +294,52 @@ func (s *videoReplayVideo) Reconfigure(
 		return err
 	}
 
-	// Always stop the running loop and open a new one
-	if err := s.openAndStartLoop(newConf.VideoPath); err != nil {
-		return fmt.Errorf("reconfigure: %w", err)
+	// Determine new mode
+	newMode := "local"
+	if newConf.Mode != nil {
+		newMode = *newConf.Mode
 	}
-	s.cfg = newConf
 
+	// If mode changed, we need to reinitialize everything
+	modeChanged := s.mode != newMode
+
+	// Always stop the running loop first
+	if s.loopCancel != nil {
+		s.loopCancel()
+		s.loopCancel = nil
+	}
+
+	// Clean up based on current mode
+	if s.mode == "local" && s.videoCapture != nil {
+		s.videoCapture.Close()
+		s.videoCapture = nil
+	}
+
+	// Update configuration and mode
+	s.cfg = newConf
+	s.mode = newMode
+
+	// Initialize based on new mode
+	switch newMode {
+	case "local":
+		if err := s.openAndStartLoop(*newConf.VideoPath); err != nil {
+			return fmt.Errorf("reconfigure local mode: %w", err)
+		}
+	case "dataset":
+		if modeChanged || s.datasetReplay == nil {
+			datasetReplay, err := newDatasetReplay(newConf, s.logger)
+			if err != nil {
+				return fmt.Errorf("reconfigure dataset mode: failed to initialize dataset replay: %w", err)
+			}
+			s.datasetReplay = datasetReplay
+		}
+		
+		if err := s.initDatasetReplay(); err != nil {
+			return fmt.Errorf("reconfigure dataset mode: failed to initialize dataset replay: %w", err)
+		}
+	}
+
+	s.logger.Infof("[Reconfigure] Successfully reconfigured to mode '%s'", newMode)
 	return nil
 }
 
@@ -349,4 +475,173 @@ func (s *videoReplayVideo) Stream(
 	errHandlers ...gostream.ErrorHandler,
 ) (gostream.VideoStream, error) {
 	return nil, fmt.Errorf("not implemented")
+}
+
+// newDatasetReplay creates a new DatasetReplay instance
+func newDatasetReplay(conf *Config, logger logging.Logger) (*DatasetReplay, error) {
+	dr := &DatasetReplay{
+		logger:         logger,
+		apiKey:         *conf.APIKey,
+		apiKeyID:       *conf.APIKeyID,
+		organizationID: *conf.OrganizationID,
+		datasetID:      *conf.DatasetID,
+	}
+
+	return dr, nil
+}
+
+// initDatasetReplay initializes the dataset replay by fetching images
+func (s *videoReplayVideo) initDatasetReplay() error {
+	if err := s.datasetReplay.fetchImages(); err != nil {
+		return fmt.Errorf("failed to fetch images from dataset: %w", err)
+	}
+
+	// Start the dataset replay loop
+	loopCtx, loopCancel := context.WithCancel(s.mainCtx)
+	s.loopCtx = loopCtx
+	s.loopCancel = loopCancel
+
+	// Calculate FPS based on dataset or use default
+	fps := 30.0
+	if s.cfg.FPS != nil {
+		fps = float64(*s.cfg.FPS)
+	}
+	s.fps = fps
+
+	s.logger.Infof("[initDatasetReplay] Starting dataset replay loop with %d images at FPS=%.2f", 
+		len(s.datasetReplay.images), fps)
+	go s.datasetReplayLoop(loopCtx, fps)
+
+	return nil
+}
+
+// datasetReplayLoop cycles through dataset images at the specified FPS
+func (s *videoReplayVideo) datasetReplayLoop(ctx context.Context, fps float64) {
+	s.logger.Infof("[datasetReplayLoop] Starting for camera %q at FPS=%.2f", s.name, fps)
+	ticker := time.NewTicker(time.Second / time.Duration(fps))
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			s.logger.Infof("[datasetReplayLoop] canceled for %q", s.name)
+			return
+		case <-ticker.C:
+			if err := s.datasetReplay.loadNextFrame(s); err != nil {
+				s.logger.Errorf("[datasetReplayLoop] Failed to load next frame: %v", err)
+			}
+		}
+	}
+}
+
+// fetchImages retrieves images from the Viam dataset
+func (dr *DatasetReplay) fetchImages() error {
+	dr.logger.Info("Fetching images from Viam dataset...")
+
+	ctx := context.Background()
+	
+	// Create Viam app client with API key
+	viamClient, err := app.CreateViamClientWithAPIKey(ctx, app.Options{}, dr.apiKey, dr.apiKeyID, dr.logger)
+	if err != nil {
+		return fmt.Errorf("failed to create Viam client: %v", err)
+	}
+	defer viamClient.Close()
+
+	dataClient := viamClient.DataClient()
+
+	// Create filter for dataset
+	filter := &app.Filter{
+		DatasetID: dr.datasetID,
+	}
+
+	// Fetch binary data from dataset
+	resp, err := dataClient.BinaryDataByFilter(ctx, true, &app.DataByFilterOptions{
+		Filter: filter,
+		Limit:  100, // Start with reasonable limit
+	})
+	if err != nil {
+		return fmt.Errorf("failed to fetch dataset images: %v", err)
+	}
+
+	dr.logger.Infof("Found %d images in dataset", len(resp.BinaryData))
+
+	// Convert binary data to DatasetImage objects
+	dr.images = make([]DatasetImage, 0, len(resp.BinaryData))
+	for i, binaryData := range resp.BinaryData {
+		if binaryData.Binary == nil {
+			dr.logger.Warnf("Skipping image %d with no binary data", i)
+			continue
+		}
+
+		// Extract timestamp from metadata
+		var timestamp time.Time
+		if binaryData.Metadata != nil {
+			timestamp = binaryData.Metadata.TimeRequested
+		} else {
+			timestamp = time.Now()
+		}
+
+		// Create filename from metadata or generate one
+		filename := fmt.Sprintf("dataset_image_%d.jpg", i)
+		if binaryData.Metadata != nil && binaryData.Metadata.FileName != "" {
+			filename = binaryData.Metadata.FileName
+		}
+
+		datasetImage := DatasetImage{
+			Data:      binaryData.Binary,
+			Timestamp: timestamp,
+			Filename:  filename,
+		}
+
+		dr.images = append(dr.images, datasetImage)
+	}
+
+	dr.logger.Infof("Successfully loaded %d images from dataset", len(dr.images))
+	return nil
+}
+
+// loadNextFrame loads the next frame from the dataset into the camera
+func (dr *DatasetReplay) loadNextFrame(cam *videoReplayVideo) error {
+	dr.mu.Lock()
+	defer dr.mu.Unlock()
+	
+	if len(dr.images) == 0 {
+		return fmt.Errorf("no images available")
+	}
+	
+	// Get current image
+	currentImage := dr.images[dr.currentIndex]
+	
+	// Convert image data to gocv.Mat
+	// Decode the image bytes directly (JPEG/PNG/etc) into a proper image matrix
+	newFrame, err := gocv.IMDecode(currentImage.Data, gocv.IMReadColor)
+	if err != nil || newFrame.Empty() {
+		// If decoding fails (e.g., with test data), create a colored placeholder frame
+		dr.logger.Warnf("Failed to decode image data for %s, using placeholder: %v", currentImage.Filename, err)
+		newFrame = gocv.NewMatWithSize(480, 640, gocv.MatTypeCV8UC3)
+		
+		// Fill with a color based on frame index for visual distinction
+		color := gocv.NewScalar(
+			float64((dr.currentIndex*50)%255),     // Blue
+			float64((dr.currentIndex*100)%255),    // Green  
+			float64((dr.currentIndex*150)%255),    // Red
+			0,                                      // Alpha
+		)
+		newFrame.SetTo(color)
+	}
+	
+	// Update camera's current frame
+	cam.frameMutex.Lock()
+	if !cam.currentFrame.Empty() {
+		cam.currentFrame.Close()
+	}
+	cam.currentFrame = newFrame
+	cam.currentFrameTime = currentImage.Timestamp
+	cam.frameMutex.Unlock()
+	
+	// Move to next frame (loop back to start if at end)
+	dr.currentIndex = (dr.currentIndex + 1) % len(dr.images)
+	
+	dr.logger.Debugf("Loaded frame %d: %s", dr.currentIndex, currentImage.Filename)
+	return nil
 }

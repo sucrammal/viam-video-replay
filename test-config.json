@@ -1,0 +1,21 @@
+{
+	"components": [
+		{
+			"name": "replayCamera-1",
+			"api": "rdk:component:camera",
+			"model": "bill:camera:video-replay",
+			"attributes": {
+				"video_path": "/Users/marcuslam/Desktop/Gambit/testVideo/test.MOV",
+				"fps": 10,
+				"loop_video": true
+			}
+		}
+	],
+	"modules": [
+		{
+			"type": "local",
+			"name": "bill_video-replay",
+			"executable_path": "/Users/marcuslam/Desktop/Gambit/viam-video-replay/video-replay"
+		}
+	]
+}
