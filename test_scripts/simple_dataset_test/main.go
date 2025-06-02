@@ -71,6 +71,63 @@ func main() {
 	}
 	fmt.Printf("✅ Found %d total images in organization\n", len(debugResp.BinaryData))
 
+	// NEW: Try to fetch images without dataset filter to see what's available
+	fmt.Println("Debug: Trying to fetch actual IMAGES from organization (no dataset filter)...")
+	orgImageFilter := &app.Filter{
+		OrganizationIDs: []string{organizationID},
+	}
+	
+	orgImageResp, err := dataClient.BinaryDataByFilter(ctx, false, &app.DataByFilterOptions{
+		Filter: orgImageFilter,
+		Limit:  10,
+	})
+	if err != nil {
+		fmt.Printf("❌ Cannot fetch images from organization: %v\n", err)
+	} else {
+		fmt.Printf("✅ Found %d total data entries in organization\n", len(orgImageResp.BinaryData))
+		
+		if len(orgImageResp.BinaryData) > 0 {
+			fmt.Println("Data types found in organization:")
+			orgDataTypes := make(map[string]int)
+			
+			for _, data := range orgImageResp.BinaryData {
+				// Check file types
+				if data.Metadata != nil {
+					var contentType string
+					if data.Metadata.FileName != "" {
+						if len(data.Metadata.FileName) > 4 {
+							ext := data.Metadata.FileName[len(data.Metadata.FileName)-4:]
+							switch ext {
+							case ".jpg", "jpeg":
+								contentType = "image/jpeg"
+							case ".png":
+								contentType = "image/png"
+							case ".bmp":
+								contentType = "image/bmp"
+							default:
+								contentType = "unknown (" + ext + ")"
+							}
+						} else {
+							contentType = "unknown filename"
+						}
+					} else {
+						contentType = "unknown"
+					}
+					orgDataTypes[contentType]++
+				}
+			}
+			
+			for contentType, count := range orgDataTypes {
+				fmt.Printf("  - %s: %d entries\n", contentType, count)
+			}
+			
+			fmt.Println("This shows there IS data available in your organization.")
+			if len(orgDataTypes) > 0 {
+				fmt.Println("The issue is specifically with the dataset being empty, not with API access.")
+			}
+		}
+	}
+
 	// Debug: Check if we can list datasets in this organization
 	fmt.Println("Debug: Checking available datasets in organization...")
 	datasets, err := dataClient.ListDatasetsByOrganizationID(ctx, organizationID)
