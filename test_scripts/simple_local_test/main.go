@@ -10,10 +10,10 @@ import (
 
 func main() {
 	fmt.Println("=== Simple Local Video Test ===")
-	
+
 	// Test video path - update this to your video file
-	testVideoPath := "/Users/marcuslam/Desktop/Gambit/testVideo/test.MOV"
-	
+	testVideoPath := "/Users/marcuslam/Desktop/Gambit/data/out.mp4"
+
 	// Check if video file exists
 	if _, err := os.Stat(testVideoPath); os.IsNotExist(err) {
 		fmt.Printf("Video file not found: %s\n", testVideoPath)
@@ -74,4 +74,4 @@ func main() {
 	fmt.Println("\n=== Simple Local Video Test Complete ===")
 	fmt.Println("This test verifies that OpenCV can read your video file.")
 	fmt.Println("If this works, the local mode should work too.")
-} 
+}

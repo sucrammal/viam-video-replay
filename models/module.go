@@ -45,15 +45,15 @@ type Config struct {
 	Width     *int    `json:"width,omitempty"`
 
 	// Core dataset mode fields (simplified)
-	Mode           *string `json:"mode,omitempty"`           // "local" or "dataset"
-	APIKey         *string `json:"api_key,omitempty"`        // Viam API key
-	APIKeyID       *string `json:"api_key_id,omitempty"`     // Viam API key ID
+	Mode           *string `json:"mode,omitempty"`            // "local" or "dataset"
+	APIKey         *string `json:"api_key,omitempty"`         // Viam API key
+	APIKeyID       *string `json:"api_key_id,omitempty"`      // Viam API key ID
 	OrganizationID *string `json:"organization_id,omitempty"` // Organization ID
-	DatasetID      *string `json:"dataset_id,omitempty"`     // Dataset ID to replay from
+	DatasetID      *string `json:"dataset_id,omitempty"`      // Dataset ID to replay from
 }
 
 // Validate ensures required fields are set based on mode
-func (c *Config) Validate(path string) ([]string, error) {
+func (c *Config) Validate(path string) ([]string, []string, error) {
 	// Determine mode (default to local if not specified)
 	mode := "local"
 	if c.Mode != nil {
@@ -63,26 +63,26 @@ func (c *Config) Validate(path string) ([]string, error) {
 	switch mode {
 	case "local":
 		if c.VideoPath == nil || *c.VideoPath == "" {
-			return nil, fmt.Errorf("video_path is required for local mode video replay camera")
+			return nil, nil, fmt.Errorf("video_path is required for local mode video replay camera")
 		}
 	case "dataset":
 		if c.APIKey == nil || *c.APIKey == "" {
-			return nil, fmt.Errorf("api_key is required for dataset mode")
+			return nil, nil, fmt.Errorf("api_key is required for dataset mode")
 		}
 		if c.APIKeyID == nil || *c.APIKeyID == "" {
-			return nil, fmt.Errorf("api_key_id is required for dataset mode")
+			return nil, nil, fmt.Errorf("api_key_id is required for dataset mode")
 		}
 		if c.OrganizationID == nil || *c.OrganizationID == "" {
-			return nil, fmt.Errorf("organization_id is required for dataset mode")
+			return nil, nil, fmt.Errorf("organization_id is required for dataset mode")
 		}
 		if c.DatasetID == nil || *c.DatasetID == "" {
-			return nil, fmt.Errorf("dataset_id is required for dataset mode")
+			return nil, nil, fmt.Errorf("dataset_id is required for dataset mode")
 		}
 	default:
-		return nil, fmt.Errorf("invalid mode '%s': must be 'local' or 'dataset'", mode)
+		return nil, nil, fmt.Errorf("invalid mode '%s': must be 'local' or 'dataset'", mode)
 	}
 
-	return nil, nil
+	return nil, nil, nil
 }
 
 // DatasetImage represents a cached image from a dataset
@@ -99,7 +99,7 @@ type DatasetReplay struct {
 	apiKeyID       string
 	organizationID string
 	datasetID      string
-	
+
 	images       []DatasetImage
 	currentIndex int
 	mu           sync.RWMutex
@@ -185,7 +185,7 @@ func newVideoReplayVideo(
 			return nil, fmt.Errorf("failed to initialize dataset replay: %w", err)
 		}
 		cam.datasetReplay = datasetReplay
-		
+
 		if err := cam.initDatasetReplay(); err != nil {
 			cancelFunc()
 			return nil, fmt.Errorf("failed to initialize dataset replay: %w", err)
@@ -265,11 +265,24 @@ func (s *videoReplayVideo) frameUpdateLoop(ctx context.Context, fps float64) {
 		case <-ticker.C:
 			newFrame := gocv.NewMat()
 			if ok := s.videoCapture.Read(&newFrame); !ok || newFrame.Empty() {
-				s.logger.Infof("[frameUpdateLoop] End of file or invalid => reset to 0 for %q", s.name)
-				s.videoCapture.Set(gocv.VideoCapturePosFrames, 0)
-				newFrame.Close()
-				newFrame = gocv.NewMat()
-				s.videoCapture.Read(&newFrame)
+				// Check if looping is enabled
+				shouldLoop := true // default to true for backward compatibility
+				if s.cfg.LoopVideo != nil {
+					shouldLoop = *s.cfg.LoopVideo
+				}
+				
+				if shouldLoop {
+					s.logger.Infof("[frameUpdateLoop] End of file => reset to 0 for %q (loop enabled)", s.name)
+					s.videoCapture.Set(gocv.VideoCapturePosFrames, 0)
+					newFrame.Close()
+					newFrame = gocv.NewMat()
+					s.videoCapture.Read(&newFrame)
+				} else {
+					s.logger.Infof("[frameUpdateLoop] End of file => stopping playback for %q (loop disabled)", s.name)
+					newFrame.Close()
+					// Keep the last frame frozen instead of stopping completely
+					return
+				}
 			}
 			now := time.Now()
 			s.frameMutex.Lock()
@@ -333,7 +346,7 @@ func (s *videoReplayVideo) Reconfigure(
 			}
 			s.datasetReplay = datasetReplay
 		}
-		
+
 		if err := s.initDatasetReplay(); err != nil {
 			return fmt.Errorf("reconfigure dataset mode: failed to initialize dataset replay: %w", err)
 		}
@@ -508,7 +521,7 @@ func (s *videoReplayVideo) initDatasetReplay() error {
 	}
 	s.fps = fps
 
-	s.logger.Infof("[initDatasetReplay] Starting dataset replay loop with %d images at FPS=%.2f", 
+	s.logger.Infof("[initDatasetReplay] Starting dataset replay loop with %d images at FPS=%.2f",
 		len(s.datasetReplay.images), fps)
 	go s.datasetReplayLoop(loopCtx, fps)
 
@@ -539,7 +552,7 @@ func (dr *DatasetReplay) fetchImages() error {
 	dr.logger.Info("Fetching images from Viam dataset...")
 
 	ctx := context.Background()
-	
+
 	// Create Viam app client with API key
 	viamClient, err := app.CreateViamClientWithAPIKey(ctx, app.Options{}, dr.apiKey, dr.apiKeyID, dr.logger)
 	if err != nil {
@@ -604,14 +617,14 @@ func (dr *DatasetReplay) fetchImages() error {
 func (dr *DatasetReplay) loadNextFrame(cam *videoReplayVideo) error {
 	dr.mu.Lock()
 	defer dr.mu.Unlock()
-	
+
 	if len(dr.images) == 0 {
 		return fmt.Errorf("no images available")
 	}
-	
+
 	// Get current image
 	currentImage := dr.images[dr.currentIndex]
-	
+
 	// Convert image data to gocv.Mat
 	// Decode the image bytes directly (JPEG/PNG/etc) into a proper image matrix
 	newFrame, err := gocv.IMDecode(currentImage.Data, gocv.IMReadColor)
@@ -619,17 +632,17 @@ func (dr *DatasetReplay) loadNextFrame(cam *videoReplayVideo) error {
 		// If decoding fails (e.g., with test data), create a colored placeholder frame
 		dr.logger.Warnf("Failed to decode image data for %s, using placeholder: %v", currentImage.Filename, err)
 		newFrame = gocv.NewMatWithSize(480, 640, gocv.MatTypeCV8UC3)
-		
+
 		// Fill with a color based on frame index for visual distinction
 		color := gocv.NewScalar(
-			float64((dr.currentIndex*50)%255),     // Blue
-			float64((dr.currentIndex*100)%255),    // Green  
-			float64((dr.currentIndex*150)%255),    // Red
-			0,                                      // Alpha
+			float64((dr.currentIndex*50)%255),  // Blue
+			float64((dr.currentIndex*100)%255), // Green
+			float64((dr.currentIndex*150)%255), // Red
+			0,                                  // Alpha
 		)
 		newFrame.SetTo(color)
 	}
-	
+
 	// Update camera's current frame
 	cam.frameMutex.Lock()
 	if !cam.currentFrame.Empty() {
@@ -638,10 +651,10 @@ func (dr *DatasetReplay) loadNextFrame(cam *videoReplayVideo) error {
 	cam.currentFrame = newFrame
 	cam.currentFrameTime = currentImage.Timestamp
 	cam.frameMutex.Unlock()
-	
+
 	// Move to next frame (loop back to start if at end)
 	dr.currentIndex = (dr.currentIndex + 1) % len(dr.images)
-	
+
 	dr.logger.Debugf("Loaded frame %d: %s", dr.currentIndex, currentImage.Filename)
 	return nil
 }

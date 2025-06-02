@@ -14,12 +14,12 @@ GOPATH    = $(HOME)/go/bin
 export PATH := ${PATH}:$(GOPATH)
 
 build: format update-rdk
-	@rm -f $(BIN_OUTPUT_PATH)/placeholder
-	@go build -tags opencvstatic $(LDFLAGS) -o $(BIN_OUTPUT_PATH)/placeholder main.go
+	@rm -f $(BIN_OUTPUT_PATH)/video-replay
+	@go build -tags opencvstatic $(LDFLAGS) -o $(BIN_OUTPUT_PATH)/video-replay main.go
 
 module.tar.gz: build
 	@rm -f $(BIN_OUTPUT_PATH)/module.tar.gz
-	@tar czf $(BIN_OUTPUT_PATH)/module.tar.gz $(BIN_OUTPUT_PATH)/placeholder
+	@tar czf $(BIN_OUTPUT_PATH)/module.tar.gz $(BIN_OUTPUT_PATH)/video-replay
 
 setup:
 	@if [ "$(UNAME_S)" = "Linux" ]; then \
@@ -30,7 +30,7 @@ setup:
 	@find . -name '*.go' -exec $(GOPATH)/goimports -w {} +
 
 clean:
-	@rm -rf $(BIN_OUTPUT_PATH)/placeholder $(BIN_OUTPUT_PATH)/module.tar.gz placeholder
+	@rm -rf $(BIN_OUTPUT_PATH)/video-replay $(BIN_OUTPUT_PATH)/module.tar.gz video-replay
 
 format:
 	@gofmt -w -s .

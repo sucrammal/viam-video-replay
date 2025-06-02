@@ -6,7 +6,7 @@
 			"model": "bill:camera:video-replay",
 			"attributes": {
 				"mode": "local",
-				"video_path": "/Users/marcuslam/Desktop/Gambit/testVideo/test.MOV",
+				"video_path": "/Users/marcuslam/Desktop/Gambit/data/out.mp4",
 				"fps": 10,
 				"loop_video": true
 			}

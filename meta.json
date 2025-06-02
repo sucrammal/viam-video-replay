@@ -1,26 +1,23 @@
 {
-  "$schema": "https://dl.viam.dev/module.schema.json",
-  "module_id": "bill:video-replay",
-  "visibility": "public",
-  "url": "https://github.com/williamjhyland/viam-video-replay",
-  "description": "An implementation of a custom Viam Camera component that replays video files. The camera component reads a video file and simulates live camera behavior by returning frames as images upon request.",
-  "models": [
-    {
-      "api": "rdk:component:camera",
-      "model": "bill:video:replay",
-      "short_description": "Provide a short (100 characters or less) description of this model here",
-      "markdown_link": "README.md#model-billvideo-replayvideo"
-    }
-  ],
-  "entrypoint": "bin/video-replay",
-  "first_run": "",
-  "build": {
-    "build": "make module.tar.gz",
-    "setup": "make setup",
-    "path": "bin/module.tar.gz",
-    "arch": [
-      "linux/amd64",
-      "linux/arm64"
-    ]
-  }
+	"$schema": "https://dl.viam.dev/module.schema.json",
+	"module_id": "bill:video-replay",
+	"visibility": "public",
+	"url": "https://github.com/williamjhyland/viam-video-replay",
+	"description": "An implementation of a custom Viam Camera component that replays video files. The camera component reads a video file and simulates live camera behavior by returning frames as images upon request.",
+	"models": [
+		{
+			"api": "rdk:component:camera",
+			"model": "bill:camera:video-replay",
+			"short_description": "Provide a short (100 characters or less) description of this model here",
+			"markdown_link": "README.md#model-billvideo-replayvideo"
+		}
+	],
+	"entrypoint": "video-replay",
+	"first_run": "",
+	"build": {
+		"build": "make module.tar.gz",
+		"setup": "make setup",
+		"path": "bin/module.tar.gz",
+		"arch": ["linux/amd64", "linux/arm64"]
+	}
 }

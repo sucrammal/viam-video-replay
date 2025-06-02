@@ -47,6 +47,123 @@ A Viam module that provides a camera component capable of replaying video files 
 -   `organization_id`: Viam organization ID (required for dataset mode)
 -   `dataset_id`: ID of the dataset to replay (required for dataset mode)
 
+## Adding to Viam Machine Configuration
+
+To use this video replay module in your Viam machine, you need to add both the module registration and camera component to your machine configuration JSON.
+
+### Step 1: Register the Module
+
+Add the module to your `modules` section:
+
+```json
+{
+	"modules": [
+		{
+			"type": "local",
+			"name": "bill_video-replay",
+			"executable_path": "/path/to/your/viam-video-replay/bin/video-replay"
+		}
+	]
+}
+```
+
+**Note**: Update the `executable_path` to match the actual location where you built the module binary.
+
+### Step 2: Add the Camera Component
+
+Add a camera component to your `components` section that uses the video replay module:
+
+#### Local Mode Example
+
+```json
+{
+	"components": [
+		{
+			"name": "replayCamera-1",
+			"api": "rdk:component:camera",
+			"model": "bill:camera:video-replay",
+			"attributes": {
+				"mode": "local",
+				"video_path": "/path/to/your/video.mp4",
+				"fps": 10,
+				"loop_video": true
+			}
+		}
+	]
+}
+```
+
+#### Dataset Mode Example
+
+```json
+{
+	"components": [
+		{
+			"name": "replayCamera-dataset",
+			"api": "rdk:component:camera",
+			"model": "bill:camera:video-replay",
+			"attributes": {
+				"mode": "dataset",
+				"api_key": "your-viam-api-key",
+				"api_key_id": "your-api-key-id",
+				"organization_id": "your-org-id",
+				"dataset_id": "your-dataset-id",
+				"fps": 5
+			}
+		}
+	]
+}
+```
+
+### Complete Configuration Example
+
+Here's a complete machine configuration with the video replay module:
+
+```json
+{
+	"components": [
+		{
+			"name": "my-replay-camera",
+			"api": "rdk:component:camera",
+			"model": "bill:camera:video-replay",
+			"attributes": {
+				"mode": "local",
+				"video_path": "/Users/username/videos/cooking_demo.mp4",
+				"fps": 15,
+				"loop_video": true
+			}
+		}
+	],
+	"modules": [
+		{
+			"type": "local",
+			"name": "bill_video-replay",
+			"executable_path": "/Users/username/viam-video-replay/bin/video-replay"
+		}
+	]
+}
+```
+
+### Important Notes
+
+1. **Executable Path**: The `executable_path` must point to the compiled binary. Build it first with:
+
+    ```bash
+    go build -o bin/video-replay models/module.go
+    ```
+
+2. **Video File Access**: For local mode, ensure the video file path is accessible from where the Viam server is running.
+
+3. **API Credentials**: For dataset mode, obtain your credentials from the Viam app:
+
+    - **API Key & API Key ID**: Settings → API Keys
+    - **Organization ID**: Organization settings
+    - **Dataset ID**: Create/find datasets in the Viam app
+
+4. **Camera Name**: Use a unique name for your camera component that doesn't conflict with other components.
+
+5. **Model Registration**: The module registers itself as `bill:camera:video-replay`, which is what you reference in the `model` field.
+
 ## Implementation Status
 
 ✅ **Local Mode**: Complete and functional

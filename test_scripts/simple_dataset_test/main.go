@@ -13,7 +13,7 @@ import (
 
 func main() {
 	fmt.Println("=== Simple Dataset Test ===")
-	
+
 	// Setup logger
 	logger := logging.NewLogger("simple-dataset-test")
 
@@ -22,7 +22,7 @@ func main() {
 	apiKeyID := os.Getenv("VIAM_API_KEY_ID")
 	organizationID := os.Getenv("VIAM_ORG_ID")
 	datasetID := os.Getenv("VIAM_DATASET_ID")
-	
+
 	if apiKey == "" || apiKeyID == "" || organizationID == "" || datasetID == "" {
 		fmt.Println("Dataset test requires environment variables:")
 		fmt.Println("  VIAM_API_KEY - Your Viam API key")
@@ -43,7 +43,7 @@ func main() {
 	fmt.Printf("Organization: %s\n", organizationID)
 
 	ctx := context.Background()
-	
+
 	// Create Viam app client
 	viamClient, err := app.CreateViamClientWithAPIKey(ctx, app.Options{}, apiKey, apiKeyID, logger)
 	if err != nil {
@@ -59,7 +59,7 @@ func main() {
 	debugFilter := &app.Filter{
 		OrganizationIDs: []string{organizationID},
 	}
-	
+
 	debugResp, err := dataClient.BinaryDataByFilter(ctx, false, &app.DataByFilterOptions{
 		Filter: debugFilter,
 		Limit:  5,
@@ -76,7 +76,7 @@ func main() {
 	orgImageFilter := &app.Filter{
 		OrganizationIDs: []string{organizationID},
 	}
-	
+
 	orgImageResp, err := dataClient.BinaryDataByFilter(ctx, false, &app.DataByFilterOptions{
 		Filter: orgImageFilter,
 		Limit:  10,
@@ -85,11 +85,11 @@ func main() {
 		fmt.Printf("❌ Cannot fetch images from organization: %v\n", err)
 	} else {
 		fmt.Printf("✅ Found %d total data entries in organization\n", len(orgImageResp.BinaryData))
-		
+
 		if len(orgImageResp.BinaryData) > 0 {
 			fmt.Println("Data types found in organization:")
 			orgDataTypes := make(map[string]int)
-			
+
 			for _, data := range orgImageResp.BinaryData {
 				// Check file types
 				if data.Metadata != nil {
@@ -116,11 +116,11 @@ func main() {
 					orgDataTypes[contentType]++
 				}
 			}
-			
+
 			for contentType, count := range orgDataTypes {
 				fmt.Printf("  - %s: %d entries\n", contentType, count)
 			}
-			
+
 			fmt.Println("This shows there IS data available in your organization.")
 			if len(orgDataTypes) > 0 {
 				fmt.Println("The issue is specifically with the dataset being empty, not with API access.")
@@ -152,7 +152,7 @@ func main() {
 
 	// Enhanced debugging: Check what types of data exist in this dataset
 	fmt.Println("Debug: Checking ALL data types in this dataset...")
-	
+
 	// Try to get ANY data from this dataset (not just images)
 	allDataResp, err := dataClient.BinaryDataByFilter(ctx, false, &app.DataByFilterOptions{
 		Filter: filter,
@@ -162,9 +162,9 @@ func main() {
 		fmt.Printf("❌ Failed to fetch any data from dataset: %v\n", err)
 		return
 	}
-	
+
 	fmt.Printf("Found %d total data entries in dataset\n", len(allDataResp.BinaryData))
-	
+
 	if len(allDataResp.BinaryData) > 0 {
 		fmt.Println("Data types found in dataset:")
 		dataTypes := make(map[string]int)
@@ -261,7 +261,7 @@ func main() {
 		newFrame, err := gocv.IMDecode(binaryData.Binary, gocv.IMReadColor)
 		if err != nil || newFrame.Empty() {
 			fmt.Printf("Failed to decode image %d: %v\n", i+1, err)
-			
+
 			// Save raw binary data for inspection
 			filename := fmt.Sprintf("dataset_raw_%d.bin", i+1)
 			if err := os.WriteFile(filename, binaryData.Binary, 0644); err != nil {
@@ -305,4 +305,4 @@ func main() {
 	fmt.Printf("Successfully processed %d images from your dataset.\n", maxImages)
 	fmt.Println("This test verifies that you can fetch images from your Viam dataset.")
 	fmt.Println("If this works, the dataset mode should work too.")
-} 
+}
