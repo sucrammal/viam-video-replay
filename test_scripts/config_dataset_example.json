@@ -1,0 +1,24 @@
+{
+	"components": [
+		{
+			"name": "dataset-video-camera",
+			"api": "rdk:component:camera",
+			"model": "bill:camera:video-replay",
+			"attributes": {
+				"mode": "dataset",
+				"api_key": "YOUR_VIAM_API_KEY",
+				"api_key_id": "YOUR_VIAM_API_KEY_ID",
+				"organization_id": "YOUR_VIAM_ORG_ID",
+				"dataset_id": "YOUR_VIAM_DATASET_ID",
+				"fps": 10
+			}
+		}
+	],
+	"modules": [
+		{
+			"type": "local",
+			"name": "bill_video-replay",
+			"executable_path": "/Users/marcuslam/Desktop/Gambit/viam-video-replay/video-replay"
+		}
+	]
+}

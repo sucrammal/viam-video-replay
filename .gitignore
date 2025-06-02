@@ -27,3 +27,11 @@ go.work.sum
 # Build outputs
 bin
 *tar.gz
+
+# Environment variables and credentials
+.env
+
+# Test output files
+simple_test_frame_*.jpg
+dataset_frame_*.jpg
+dataset_raw_*.bin
