@@ -220,6 +220,12 @@ func (s *videoReplayVideo) openAndStartLoop(videoPath string) error {
 		fps = 30
 	}
 
+	// Override with configured FPS if provided
+	if s.cfg.FPS != nil {
+		fps = float64(*s.cfg.FPS)
+		s.logger.Infof("[openAndStartLoop] Overriding video FPS with configured value: %.2f", fps)
+	}
+
 	// Read initial frame
 	firstFrame := gocv.NewMat()
 	if ok := cap.Read(&firstFrame); !ok || firstFrame.Empty() {
@@ -270,7 +276,7 @@ func (s *videoReplayVideo) frameUpdateLoop(ctx context.Context, fps float64) {
 				if s.cfg.LoopVideo != nil {
 					shouldLoop = *s.cfg.LoopVideo
 				}
-				
+
 				if shouldLoop {
 					s.logger.Infof("[frameUpdateLoop] End of file => reset to 0 for %q (loop enabled)", s.name)
 					s.videoCapture.Set(gocv.VideoCapturePosFrames, 0)
